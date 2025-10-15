@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOTP Login System</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px; }
+        .container { background: #f5f5f5; padding: 20px; border-radius: 8px; }
+        input, button { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #0070f3; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0051b3; }
+        .step { display: none; }
+        .message { padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔐 TOTP Login System</h2>
+        
+        <!-- Step 1: Username -->
+        <div id="step1" class="step">
+            <input type="text" id="username" placeholder="Enter username" required>
+            <button onclick="requestTOTP()">Request Login Code</button>
+        </div>
+
+        <!-- Step 2: TOTP Code -->
+        <div id="step2" class="step">
+            <p>Check Discord for your TOTP code</p>
+            <input type="text" id="totpCode" placeholder="Enter 6-digit code" maxlength="6">
+            <button onclick="verifyTOTP()">Verify Code</button>
+            <button onclick="backToUsername()" style="background: #6c757d;">Back</button>
+        </div>
+
+        <!-- Step 3: Success -->
+        <div id="step3" class="step">
+            <div class="message success" id="successMessage"></div>
+            <button onclick="resetForm()">Login Again</button>
+        </div>
+
+        <div id="message" class="message"></div>
+    </div>
+
+    <script>
+        let currentUsername = '';
+
+        function showStep(stepNumber) {
+            document.querySelectorAll('.step').forEach(step => {
+                step.style.display = 'none';
+            });
+            document.getElementById(`step${stepNumber}`).style.display = 'block';
+        }
+
+        function showMessage(text, type = 'error') {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = `message ${type}`;
+            messageDiv.style.display = 'block';
+        }
+
+        function hideMessage() {
+            document.getElementById('message').style.display = 'none';
+        }
+
+        async function requestTOTP() {
+            const username = document.getElementById('username').value.trim();
+            if (!username) {
+                showMessage('Please enter a username');
+                return;
+            }
+
+            hideMessage();
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentUsername = username;
+                    showStep(2);
+                    showMessage('TOTP code generated! Check your Discord webhook.', 'success');
+                } else {
+                    showMessage(data.error || 'Failed to generate TOTP');
+                }
+            } catch (error) {
+                showMessage('Network error: ' + error.message);
+            }
+        }
+
+        async function verifyTOTP() {
+            const code = document.getElementById('totpCode').value.trim();
+            if (!code || code.length !== 6) {
+                showMessage('Please enter a valid 6-digit code');
+                return;
+            }
+
+            hideMessage();
+
+            try {
+                const response = await fetch('/api/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        username: currentUsername, 
+                        code 
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('successMessage').textContent = 
+                        `Login successful! Welcome ${currentUsername}`;
+                    showStep(3);
+                } else {
+                    showMessage(data.error || 'Invalid code');
+                }
+            } catch (error) {
+                showMessage('Network error: ' + error.message);
+            }
+        }
+
+        function backToUsername() {
+            showStep(1);
+            hideMessage();
+        }
+
+        function resetForm() {
+            currentUsername = '';
+            document.getElementById('username').value = '';
+            document.getElementById('totpCode').value = '';
+            showStep(1);
+            hideMessage();
+        }
+
+        // Initialize
+        showStep(1);
+    </script>
+</body>
+</html>
