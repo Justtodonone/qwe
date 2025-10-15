@@ -1,7 +1,3 @@
-// Simple in-memory storage
-const totpStore = new Map();
-const sessionStore = new Map();
-
 import crypto from 'crypto';
 
 class SimpleTOTP {
@@ -38,6 +34,9 @@ class SimpleTOTP {
 
 const totpSystem = new SimpleTOTP();
 
+// Simple in-memory storage for attempts (per instance)
+const attemptStore = new Map();
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -52,54 +51,65 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { username, code } = req.body;
+        const { username, code, token } = req.body;
         
         if (!username || !code) {
             return res.status(400).json({ error: 'Username and code are required' });
         }
 
-        // Get TOTP data
-        const totpData = totpStore.get(username);
-        
-        if (!totpData) {
-            return res.status(400).json({ error: 'No active TOTP session found or code expired' });
+        if (!token) {
+            return res.status(400).json({ error: 'Verification token is missing. Please request a new code.' });
+        }
+
+        // Decode the token
+        let tokenData;
+        try {
+            const decoded = Buffer.from(token, 'base64url').toString('utf8');
+            tokenData = JSON.parse(decoded);
+        } catch (error) {
+            return res.status(400).json({ error: 'Invalid token. Please request a new code.' });
+        }
+
+        // Verify token data
+        if (tokenData.username !== username) {
+            return res.status(400).json({ error: 'Token mismatch. Please request a new code.' });
         }
 
         // Check if expired (60 seconds)
-        if (Date.now() - totpData.timestamp > 60000) {
-            totpStore.delete(username);
-            return res.status(400).json({ error: 'TOTP code expired' });
+        if (Date.now() - tokenData.timestamp > 60000) {
+            return res.status(400).json({ error: 'TOTP code expired. Please request a new code.' });
         }
 
-        // Check attempts
-        if (totpData.attempts >= 3) {
-            totpStore.delete(username);
+        // Check attempts (per username in this instance)
+        const attemptKey = `${username}_${tokenData.timestamp}`;
+        const attempts = attemptStore.get(attemptKey) || 0;
+        
+        if (attempts >= 3) {
             return res.status(400).json({ error: 'Too many attempts. Please request a new code.' });
         }
 
         // Verify code
-        const isValid = totpSystem.verifyTOTP(totpData.secret, code);
+        const isValid = totpSystem.verifyTOTP(tokenData.secret, code);
         
         if (!isValid) {
-            totpData.attempts += 1;
-            totpStore.set(username, totpData);
-            return res.status(400).json({ error: 'Invalid code' });
+            attemptStore.set(attemptKey, attempts + 1);
+            return res.status(400).json({ error: 'Invalid code. Attempts remaining: ' + (3 - attempts - 1) });
         }
 
         // Code is valid - create session
-        sessionStore.set(username, {
+        const sessionData = {
             username,
             loggedIn: true,
             loginTime: Date.now()
-        });
+        };
 
-        // Clean up TOTP
-        totpStore.delete(username);
+        // Clean up attempts
+        attemptStore.delete(attemptKey);
 
         res.status(200).json({
             success: true,
             message: 'Login successful!',
-            session: { username, loginTime: new Date().toISOString() }
+            session: sessionData
         });
 
     } catch (error) {
