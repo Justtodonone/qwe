@@ -41,7 +41,7 @@ class SimpleTOTP {
 
 const totpSystem = new SimpleTOTP();
 
-async function sendToDiscord(username, totpCode, ip = 'Unknown') {
+async function sendToDiscord(username, totpCode) {
     const webhookURL = process.env.DISCORD_WEBHOOK_URL;
     
     if (!webhookURL) {
@@ -58,7 +58,6 @@ async function sendToDiscord(username, totpCode, ip = 'Unknown') {
                 fields: [
                     { name: "TOTP Code", value: `\`\`\`${totpCode}\`\`\``, inline: false },
                     { name: "Expires In", value: "60 seconds", inline: true },
-                    { name: "IP", value: ip, inline: true },
                     { name: "Time", value: new Date().toLocaleString(), inline: false }
                 ],
                 timestamp: new Date().toISOString()
@@ -112,8 +111,7 @@ export default async function handler(req, res) {
         });
 
         // Send to Discord
-        const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-        await sendToDiscord(username, totpCode, ip);
+        await sendToDiscord(username, totpCode);
 
         res.status(200).json({
             success: true,
