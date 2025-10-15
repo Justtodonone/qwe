@@ -1,0 +1,6 @@
+{
+  "name": "totp-login-system",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "TOTP Login System with Discord Webhook"
+}
