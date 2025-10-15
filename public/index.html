@@ -86,9 +86,9 @@
 
                 if (data.success) {
                     currentUsername = username;
-                    currentToken = data.token; // Store the verification token
+                    currentToken = data.token;
                     showStep(2);
-                    showMessage('TOTP code sent to Discord! Enter it within 60 seconds.', 'success');
+                    showMessage('TOTP code sent to Discord! Enter it within 90 seconds.', 'success');
                 } else {
                     showMessage(data.error || 'Failed to generate TOTP');
                 }
