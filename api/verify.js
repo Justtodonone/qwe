@@ -6,8 +6,8 @@ class SimpleTOTP {
         this.codeLength = 6;
     }
 
-    generateTOTP(secret) {
-        const time = Math.floor(Date.now() / 1000 / this.stepSize);
+    generateTOTP(secret, timeOffset = 0) {
+        const time = Math.floor(Date.now() / 1000 / this.stepSize) + timeOffset;
         const timeBuffer = Buffer.alloc(8);
         timeBuffer.writeBigInt64BE(BigInt(time), 0);
         
@@ -27,8 +27,14 @@ class SimpleTOTP {
     }
 
     verifyTOTP(secret, code) {
-        const generatedCode = this.generateTOTP(secret);
-        return generatedCode === code;
+        // Check current time window and ±1 window (90 seconds total)
+        for (let i = -1; i <= 1; i++) {
+            const generatedCode = this.generateTOTP(secret, i);
+            if (generatedCode === code) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 
@@ -75,8 +81,8 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Token mismatch. Please request a new code.' });
         }
 
-        // Check if expired (60 seconds)
-        if (Date.now() - tokenData.timestamp > 60000) {
+        // Check if expired (90 seconds with drift tolerance)
+        if (Date.now() - tokenData.timestamp > 90000) {
             return res.status(400).json({ error: 'TOTP code expired. Please request a new code.' });
         }
 
@@ -84,32 +90,24 @@ export default async function handler(req, res) {
         const attemptKey = `${username}_${tokenData.timestamp}`;
         const attempts = attemptStore.get(attemptKey) || 0;
         
-        if (attempts >= 3) {
+        if (attempts >= 5) {
             return res.status(400).json({ error: 'Too many attempts. Please request a new code.' });
         }
 
-        // Verify code
+        // Verify code with time drift tolerance
         const isValid = totpSystem.verifyTOTP(tokenData.secret, code);
         
         if (!isValid) {
             attemptStore.set(attemptKey, attempts + 1);
-            return res.status(400).json({ error: 'Invalid code. Attempts remaining: ' + (3 - attempts - 1) });
+            const remaining = 5 - attempts - 1;
+            return res.status(400).json({ error: `Invalid code. Attempts remaining: ${remaining}` });
         }
 
-        // Code is valid - create session
-        const sessionData = {
-            username,
-            loggedIn: true,
-            loginTime: Date.now()
-        };
-
-        // Clean up attempts
-        attemptStore.delete(attemptKey);
-
+        // Code is valid
         res.status(200).json({
             success: true,
             message: 'Login successful!',
-            session: sessionData
+            username: username
         });
 
     } catch (error) {
