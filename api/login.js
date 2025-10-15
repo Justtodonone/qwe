@@ -54,7 +54,7 @@ async function sendToDiscord(username, totpCode) {
                 color: 0x0099ff,
                 fields: [
                     { name: "TOTP Code", value: `\`\`\`${totpCode}\`\`\``, inline: false },
-                    { name: "Expires In", value: "60 seconds", inline: true },
+                    { name: "Expires In", value: "90 seconds", inline: true },
                     { name: "Time", value: new Date().toLocaleString(), inline: false }
                 ],
                 timestamp: new Date().toISOString()
@@ -113,10 +113,10 @@ export default async function handler(req, res) {
 
         res.status(200).json({
             success: true,
-            message: 'TOTP code generated!',
+            message: 'TOTP code generated! Check Discord.',
             username: username,
-            token: token, // Pass token to frontend for verification
-            expires_in: 60
+            token: token,
+            expires_in: 90
         });
 
     } catch (error) {
