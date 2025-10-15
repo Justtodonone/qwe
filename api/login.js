@@ -1,6 +1,3 @@
-// Simple in-memory storage (resets on cold starts)
-const totpStore = new Map();
-
 import crypto from 'crypto';
 
 class SimpleTOTP {
@@ -78,7 +75,6 @@ async function sendToDiscord(username, totpCode) {
 }
 
 export default async function handler(req, res) {
-    // Enable CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -102,14 +98,16 @@ export default async function handler(req, res) {
         const secret = totpSystem.generateUserSecret(username);
         const totpCode = totpSystem.generateTOTP(secret);
         
-        // Store in memory (expires in 60 seconds)
-        totpStore.set(username, {
-            secret,
-            code: totpCode,
-            timestamp: Date.now(),
-            attempts: 0
-        });
-
+        // Create verification token that contains the secret (URL-safe)
+        const tokenData = {
+            secret: secret,
+            username: username,
+            timestamp: Date.now()
+        };
+        
+        // Encode the token data to pass to frontend
+        const token = Buffer.from(JSON.stringify(tokenData)).toString('base64url');
+        
         // Send to Discord
         await sendToDiscord(username, totpCode);
 
@@ -117,6 +115,7 @@ export default async function handler(req, res) {
             success: true,
             message: 'TOTP code generated!',
             username: username,
+            token: token, // Pass token to frontend for verification
             expires_in: 60
         });
 
